@@ -1,0 +1,249 @@
+import tkinter as tk
+import json
+import random
+from tkinter import messagebox
+
+
+def load_flashcards():
+    """Load flashcards from JSON file or create a new one if not found."""
+    try:
+        with open('flashcards.json', 'r') as f:
+            return json.load(f)["cards"]
+    except (FileNotFoundError, json.JSONDecodeError):
+        with open('flashcards.json', 'w') as f:
+            json.dump({"cards": []}, f)
+        return []
+
+def save_flashcards():
+    """Save the flashcards to JSON file."""
+    with open('flashcards.json', 'w') as f:
+        json.dump({"cards": flashcards}, f, indent=4)
+
+
+def update_card_display():
+    """Update the display with the current flashcard."""
+    if not flashcards:
+        question_label.config(text="No flashcards. Add one below!")
+        answer_entry.config(state='disabled')
+        check_button.config(state='disabled')
+        next_button.config(state='disabled')
+        delete_button.config(state='disabled')
+        quiz_button.config(state='disabled')
+    else:
+        question_label.config(text=flashcards[current_card_index]['question'])
+        answer_entry.config(state='normal')
+        check_button.config(state='normal')
+        next_button.config(state='normal')
+        delete_button.config(state='normal')
+        quiz_button.config(state='normal')
+    answer_entry.delete(0, tk.END)
+    result_label.config(text="")
+
+def check_answer():
+    """Compare user input with the correct answer."""
+    user_answer = answer_entry.get().strip().lower()
+    correct_answer = flashcards[current_card_index]['answer'].strip().lower()
+    if user_answer == correct_answer:
+        result_label.config(text="✅ Correct!", fg="green")
+    else:
+        result_label.config(
+            text=f"❌ Wrong! Correct: {flashcards[current_card_index]['answer']}",
+            fg="red"
+        )
+
+def next_flashcard():
+    """Move to the next flashcard."""
+    global current_card_index
+    if flashcards:
+        current_card_index = (current_card_index + 1) % len(flashcards)
+        update_card_display()
+
+def add_flashcard():
+    """Add a new flashcard to the list and save."""
+    new_question = new_question_entry.get().strip()
+    new_answer = new_answer_entry.get().strip()
+
+    if new_question and new_answer:
+        flashcards.append({"question": new_question, "answer": new_answer})
+        save_flashcards()
+
+        new_question_entry.delete(0, tk.END)
+        new_answer_entry.delete(0, tk.END)
+        result_label.config(text="🟦 Flashcard Added!", fg="blue")
+
+        if len(flashcards) == 1:
+            update_card_display()
+    else:
+        messagebox.showwarning("Input Error", "Please fill in both fields.")
+
+def delete_flashcard():
+    """Delete the currently displayed flashcard."""
+    global current_card_index
+    if not flashcards:
+        messagebox.showinfo("No Cards", "There are no flashcards to delete.")
+        return
+
+    confirm = messagebox.askyesno("Confirm Delete", "Delete this flashcard?")
+    if confirm:
+        del flashcards[current_card_index]
+        save_flashcards()
+
+        if not flashcards:
+            current_card_index = 0
+        else:
+            current_card_index %= len(flashcards)
+
+        update_card_display()
+        result_label.config(text="🗑️ Flashcard Deleted!", fg="orange")
+
+
+quiz_mode = False
+quiz_cards = []
+quiz_index = 0
+quiz_score = 0
+
+def start_quiz():
+    """Initialize and start the quiz mode."""
+    global quiz_mode, quiz_cards, quiz_index, quiz_score
+    if not flashcards:
+        messagebox.showinfo("No Cards", "Please add some flashcards first!")
+        return
+
+    quiz_mode = True
+    quiz_cards = flashcards.copy()
+    random.shuffle(quiz_cards)
+    quiz_index = 0
+    quiz_score = 0
+
+    question_label.config(text=f"Quiz Started! Question 1/{len(quiz_cards)}")
+    answer_entry.delete(0, tk.END)
+    result_label.config(text="")
+    next_button.config(state='disabled')
+    delete_button.config(state='disabled')
+    check_button.config(text="Submit", command=check_quiz_answer)
+    quiz_button.config(state='disabled')
+
+    display_quiz_question()
+
+def display_quiz_question():
+    """Show the next question in quiz mode."""
+    if quiz_index < len(quiz_cards):
+        question_label.config(
+            text=f"Q{quiz_index + 1}: {quiz_cards[quiz_index]['question']}"
+        )
+        answer_entry.delete(0, tk.END)
+        result_label.config(text="")
+    else:
+        end_quiz()
+
+def check_quiz_answer():
+    """Check user's answer in quiz mode."""
+    global quiz_index, quiz_score
+    user_answer = answer_entry.get().strip().lower()
+    correct_answer = quiz_cards[quiz_index]['answer'].strip().lower()
+
+    if user_answer == correct_answer:
+        quiz_score += 1
+        result_label.config(text="✅ Correct!", fg="green")
+    else:
+        result_label.config(
+            text=f"❌ Wrong! Correct: {quiz_cards[quiz_index]['answer']}", fg="red"
+        )
+
+    quiz_index += 1
+    window.after(1000, display_quiz_question)  # Show next after 1 second
+
+def end_quiz():
+    """Display final score and reset buttons."""
+    global quiz_mode
+    quiz_mode = False
+    score_msg = f"Quiz Complete!\nScore: {quiz_score}/{len(quiz_cards)}"
+    messagebox.showinfo("Quiz Result", score_msg)
+    result_label.config(text=score_msg, fg="blue")
+    check_button.config(text="Check", command=check_answer)
+    next_button.config(state='normal')
+    delete_button.config(state='normal')
+    quiz_button.config(state='normal')
+    update_card_display()
+
+
+def toggle_fullscreen(event=None):
+    global fullscreen
+    fullscreen = not fullscreen
+    window.attributes("-fullscreen", fullscreen)
+
+def exit_fullscreen(event=None):
+    global fullscreen
+    fullscreen = False
+    window.attributes("-fullscreen", False)
+
+
+window = tk.Tk()
+window.title("Flashcard Generator")
+window.geometry("700x600")
+window.configure(bg="#f0f0f0")
+
+fullscreen = False
+window.bind("<F11>", toggle_fullscreen)
+window.bind("<Escape>", exit_fullscreen)
+
+
+viewer_frame = tk.Frame(window, bg="#f0f0f0")
+viewer_frame.pack(pady=20)
+
+question_label = tk.Label(
+    viewer_frame, text="", font=('Helvetica', 18, 'bold'),
+    wraplength=600, bg="#f0f0f0"
+)
+question_label.pack(pady=20)
+
+answer_entry = tk.Entry(viewer_frame, font=('Helvetica', 16), width=40)
+answer_entry.pack(pady=10)
+
+button_frame = tk.Frame(viewer_frame, bg="#f0f0f0")
+button_frame.pack(pady=10)
+
+check_button = tk.Button(button_frame, text="Check", command=check_answer, width=12)
+check_button.grid(row=0, column=0, padx=5)
+
+next_button = tk.Button(button_frame, text="Next", command=next_flashcard, width=12)
+next_button.grid(row=0, column=1, padx=5)
+
+delete_button = tk.Button(button_frame, text="Delete", command=delete_flashcard, width=12)
+delete_button.grid(row=0, column=2, padx=5)
+
+quiz_button = tk.Button(button_frame, text="Start Quiz", command=start_quiz, width=12)
+quiz_button.grid(row=0, column=3, padx=5)
+
+fullscreen_button = tk.Button(button_frame, text="Fullscreen (F11)", command=toggle_fullscreen, width=15)
+fullscreen_button.grid(row=0, column=4, padx=5)
+
+result_label = tk.Label(viewer_frame, text="", font=('Helvetica', 14), bg="#f0f0f0")
+result_label.pack(pady=10)
+
+
+add_frame = tk.LabelFrame(window, text="Add New Flashcard", padx=15, pady=15, bg="#ffffff", font=('Helvetica', 12, 'bold'))
+add_frame.pack(pady=20, fill='x', padx=20)
+
+tk.Label(add_frame, text="Question:", bg="#ffffff", font=('Helvetica', 12)).pack(anchor='w')
+new_question_entry = tk.Entry(add_frame, width=60)
+new_question_entry.pack(pady=5)
+
+tk.Label(add_frame, text="Answer:", bg="#ffffff", font=('Helvetica', 12)).pack(anchor='w')
+new_answer_entry = tk.Entry(add_frame, width=60)
+new_answer_entry.pack(pady=5)
+
+add_button = tk.Button(add_frame, text="Add Flashcard", command=add_flashcard, width=15)
+add_button.pack(pady=10)
+
+
+flashcards = load_flashcards()
+current_card_index = 0
+
+if flashcards:
+    random.shuffle(flashcards)
+    update_card_display()
+else:
+    question_label.config(text="No flashcards. Add one below!")
+
+window.mainloop()
